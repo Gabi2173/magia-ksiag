@@ -1,39 +1,6 @@
-/*
-Magia Ksiąg — pełny frontend sklepu książek do wdrożenia na Vercel
-Plik: MagiaKsiagApp.jsx (single-file React component + instrukcje)
-
-Funkcje zawarte:
-- Katalog książek z 20 kategoriami (przykładowe seed dane)
-- Rejestracja / logowanie (localStorage - demo)
-- Koszyk, zamówienia i panel "Moje konto" (zamówienia zapisywane w localStorage)
-- Integracja płatności: Stripe Checkout (demo) — wymaga SECRET_KEY na Vercel jako ENV VAR: STRIPE_SECRET_KEY oraz PUBLIC STRIPE_PUBLISHABLE_KEY
-- Po pomyślnej płatności order jest zapisywany w koncie użytkownika oraz wysyłane jest powiadomienie e-mailem przez Formspree (wymaga skonfigurowanego endpointu FORMSPREE_ENDPOINT jako ENV VAR). W pliku znajdziesz przykładowe wywołanie /api/notify-order (serwerless function) — kod funkcji do umieszczenia w katalogu /api na Vercel znajduje się niżej w komentarzu.
-- Styl: Tailwind CSS (klasy użyte), kolorystyka beżowo-brązowa jak w logo.
-- Dane kontaktowe w stopce i header: Stanisława Moniuszki 6/1, kawiarnia@miedzywierszami.pl, +48 791 041 061, Facebook URL
-
-Instrukcja uruchomienia lokalnie (Vite + Tailwind):
-1. Utwórz nowy projekt: npm create vite@latest magia-ksiag -- --template react
-2. Przenieś ten plik do src/App.jsx (zastępując domyślny plik).
-3. Zainstaluj zależności: npm install
-4. Zainstaluj Tailwind i dodaj konfigurację (opis niżej). Alternatywnie usuń klasy Tailwind i dostosuj CSS.
-5. Uruchom: npm run dev
-
-Deploy na Vercel:
-1. Zainicjuj repo git i podłącz do Vercel.
-2. Dodaj zmienne środowiskowe (Project Settings -> Environment Variables):
-   - STRIPE_SECRET_KEY = (Twoje Stripe secret test key, zaczyna się od sk_live lub sk_test)
-   - STRIPE_PUBLISHABLE_KEY = (Stripe publishable key - pk_test...)
-   - FORMSPREE_ENDPOINT = (https://formspree.io/f/your-id) — opcjonalnie, jeśli chcesz powiadomienia email
-3. Utwórz folder api z dwoma funkcjami: create-checkout-session.js i notify-order.js (kod poniżej). Vercel automatycznie wystawi endpointy.
-4. Wdróż projekt.
-
----
-Poniżej: komplet kodu frontendu (React). W dolnej części pliku znajdziesz przykładowe serwerless funkcje, które musisz utworzyć jako pliki w /api (nie wklejaj ich do App.jsx) — instrukcja niżej.
-*/
-
 import React, { useState, useEffect, createContext, useContext } from 'react';
 
-/* ---------------------- KONFIG (podmień logo URL jeśli chcesz) ---------------------- */
+/* ---------------------- KONFIG ---------------------- */
 const CONFIG = {
   shopName: 'Magia Ksiąg',
   address: 'Stanisława Moniuszki 6/1, Szczecin',
@@ -41,13 +8,12 @@ const CONFIG = {
   phone: '+48 791 041 061',
   facebook: 'https://www.facebook.com/SzczecinMiedzyWierszami/?locale=pl_PL',
   theme: {
-    accent: '#6b4f37', // brązowy
-    bg: '#f3e9dd', // beżowy
+    accent: '#6b4f37',
+    bg: '#f3e9dd',
     card: '#fff'
   }
 };
 
-/* ---------------------- KATEGORIE (20) ---------------------- */
 export const CATEGORIES = [
   'Nowości','Bestsellery','Fantastyka','Kryminał i sensacja','Literatura piękna',
   'Romans','Horror','Sci-fi','Dla dzieci','Dla młodzieży',
@@ -55,88 +21,142 @@ export const CATEGORIES = [
   'Filozofia','Religia i duchowość','Kulinaria','Podróże i reportaże','Poradniki i hobby'
 ];
 
-/* ---------------------- KONTEKSTY ---------------------- */
+/* ---------------------- AUTH ---------------------- */
 const AuthContext = createContext();
-function AuthProvider({ children }){
+function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  useEffect(()=>{
-    const raw = localStorage.getItem('mk_user');
-    if(raw) setUser(JSON.parse(raw));
-  },[]);
-  function signup({email,password,name}){
-    const users = JSON.parse(localStorage.getItem('mk_users')||'[]');
-    if(users.find(u=>u.email===email)) throw new Error('Użytkownik już istnieje');
-    const newUser = {id: Date.now(), email, password, name, orders:[]};
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('mk_user');
+      if (raw) setUser(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const signup = ({ email, password, name }) => {
+    const users = JSON.parse(localStorage.getItem('mk_users') || '[]');
+    if (users.find(u => u.email === email)) throw new Error('Użytkownik już istnieje');
+    const newUser = { id: Date.now(), email, password, name, orders: [] };
     users.push(newUser);
     localStorage.setItem('mk_users', JSON.stringify(users));
     localStorage.setItem('mk_user', JSON.stringify(newUser));
     setUser(newUser);
-  }
-  function login({email,password}){
-    const users = JSON.parse(localStorage.getItem('mk_users')||'[]');
-    const found = users.find(u=>u.email===email && u.password===password);
-    if(!found) throw new Error('Niepoprawne dane');
+  };
+
+  const login = ({ email, password }) => {
+    const users = JSON.parse(localStorage.getItem('mk_users') || '[]');
+    const found = users.find(u => u.email === email && u.password === password);
+    if (!found) throw new Error('Niepoprawne dane logowania');
     localStorage.setItem('mk_user', JSON.stringify(found));
     setUser(found);
-  }
-  function logout(){ localStorage.removeItem('mk_user'); setUser(null); }
-  function refreshUser(){ const raw = localStorage.getItem('mk_user'); if(raw) setUser(JSON.parse(raw)); }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('mk_user');
+    setUser(null);
+  };
+
   return (
-    <AuthContext.Provider value={{user, signup, login, logout, refreshUser}}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, signup, login, logout }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
-function useAuth(){ return useContext(AuthContext); }
+const useAuth = () => useContext(AuthContext);
 
+/* ---------------------- KOSZYK ---------------------- */
 const CartContext = createContext();
-function CartProvider({ children }){
+function CartProvider({ children }) {
   const [items, setItems] = useState([]);
-  useEffect(()=>{ const raw = localStorage.getItem('mk_cart'); if(raw) setItems(JSON.parse(raw)); },[]);
-  useEffect(()=>{ localStorage.setItem('mk_cart', JSON.stringify(items)); },[items]);
-  function add(product, qty=1){ setItems(prev=>{ const found = prev.find(p=>p.id===product.id); if(found) return prev.map(p=>p.id===product.id?{...p, qty:p.qty+qty}:p); return [...prev, {...product, qty}]; }); }
-  function remove(id){ setItems(prev=>prev.filter(p=>p.id!==id)); }
-  function updateQty(id, qty){ setItems(prev=>prev.map(p=>p.id===id?{...p, qty}:p)); }
-  function clear(){ setItems([]); }
-  const total = items.reduce((s,p)=>s + (parseFloat(String(p.price).replace(',','.'))||0)*p.qty,0);
-  return <CartContext.Provider value={{items, add, remove, updateQty, clear, total}}>{children}</CartContext.Provider>;
-}
-function useCart(){ return useContext(CartContext); }
 
-/* ---------------------- DANE STARTOWE (seed) ---------------------- */
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('mk_cart');
+      if (raw) setItems(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('mk_cart', JSON.stringify(items));
+  }, [items]);
+
+  const add = (product, qty = 1) => {
+    setItems(prev => {
+      const found = prev.find(p => p.id === product.id);
+      if (found)
+        return prev.map(p =>
+          p.id === product.id ? { ...p, qty: p.qty + qty } : p
+        );
+      return [...prev, { ...product, qty }];
+    });
+  };
+
+  const remove = id => setItems(prev => prev.filter(p => p.id !== id));
+  const updateQty = (id, qty) =>
+    setItems(prev =>
+      prev.map(p => (p.id === id ? { ...p, qty: Number(qty) } : p))
+    );
+  const clear = () => setItems([]);
+  const total = items.reduce(
+    (sum, p) => sum + (parseFloat(p.price) || 0) * p.qty,
+    0
+  );
+
+  return (
+    <CartContext.Provider value={{ items, add, remove, updateQty, clear, total }}>
+      {children}
+    </CartContext.Provider>
+  );
+}
+const useCart = () => useContext(CartContext);
+
+/* ---------------------- DANE ---------------------- */
 const seedBooks = [
-  {id:1, title:'Cień i Kość', author:'Leigh Bardugo', price:39.99, category:'Fantastyka'},
-  {id:2, title:'Sto lat samotności', author:'Gabriel García Márquez', price:44.00, category:'Literatura piękna'},
-  {id:3, title:'Mistrz i Małgorzata', author:'Michaił Bułhakow', price:34.50, category:'Literatura piękna'},
-  {id:4, title:'Hobbit', author:'J.R.R. Tolkien', price:49.00, category:'Fantastyka'},
-  {id:5, title:'Zabić drozda', author:'Harper Lee', price:29.99, category:'Literatura piękna'},
-  {id:6, title:'Mała księżniczka', author:'Frances Hodgson Burnett', price:24.00, category:'Dla dzieci'},
-  {id:7, title:'Czarny kryminał', author:'A. Kowalski', price:31.50, category:'Kryminał i sensacja'},
-  {id:8, title:'Sztuka szczęścia', author:'D. Lama', price:37.00, category:'Religia i duchowość'},
-  {id:9, title:'Gotuj zdrowo', author:'K. Nowak', price:45.00, category:'Kulinaria'},
-  {id:10, title:'Podróże małe i duże', author:'M. Zieliński', price:39.00, category:'Podróże i reportaże'},
-  {id:11, title:'Programuj w JS', author:'T. Kowal', price:89.00, category:'Poradniki i hobby'},
-  {id:12, title:'Komiksy: Przygody', author:'R. Lee', price:19.99, category:'Komiksy i manga'},
-  {id:13, title:'Biografia X', author:'J. Nowak', price:29.00, category:'Biografie'},
-  {id:14, title:'Historia świata', author:'A. Historyk', price:59.00, category:'Historia'},
-  {id:15, title:'Psychologia w praktyce', author:'P. Psych', price:49.00, category:'Psychologia'},
-  {id:16, title:'Sci-Fi Zbiór', author:'L. Space', price:39.50, category:'Sci-fi'},
-  {id:17, title:'Romans przy kawie', author:'E. Love', price:27.00, category:'Romans'},
-  {id:18, title:'Horror: Noc', author:'S. Dark', price:33.00, category:'Horror'},
-  {id:19, title:'Rozwój osobisty 101', author:'G. Coach', price:42.00, category:'Rozwój osobisty'},
-  {id:20, title:'Filozofia dla każdego', author:'F. Myśliciel', price:38.00, category:'Filozofia'}
+  {id:1,title:'Cień i Kość',author:'Leigh Bardugo',price:39.99,category:'Fantastyka'},
+  {id:2,title:'Sto lat samotności',author:'Gabriel García Márquez',price:44.00,category:'Literatura piękna'},
+  {id:3,title:'Mistrz i Małgorzata',author:'Michaił Bułhakow',price:34.50,category:'Literatura piękna'},
+  {id:4,title:'Hobbit',author:'J.R.R. Tolkien',price:49.00,category:'Fantastyka'},
+  {id:5,title:'Zabić drozda',author:'Harper Lee',price:29.99,category:'Literatura piękna'}
 ];
 
-function ensureSeed(){ if(!localStorage.getItem('mk_books')) localStorage.setItem('mk_books', JSON.stringify(seedBooks)); }
-function useBooks(){ const [books,setBooks] = useState([]); useEffect(()=>{ ensureSeed(); setBooks(JSON.parse(localStorage.getItem('mk_books'))||[]); },[]); function addBook(b){ const all=JSON.parse(localStorage.getItem('mk_books')||'[]'); all.push(b); localStorage.setItem('mk_books',JSON.stringify(all)); setBooks(all); } function search(q){ q=q.trim().toLowerCase(); if(!q) return books; return books.filter(b=> (b.title+b.author+b.category).toLowerCase().includes(q)); } function filterByCategory(cat){ if(!cat) return books; return books.filter(b=>b.category===cat); } return {books, addBook, search, filterByCategory}; }
+function useBooks() {
+  const [books, setBooks] = useState([]);
 
-/* ---------------------- STYLES INLINE (prosty fallback jeśli nie używasz Tailwind) ---------------------- */
+  useEffect(() => {
+    if (!localStorage.getItem('mk_books')) {
+      localStorage.setItem('mk_books', JSON.stringify(seedBooks));
+    }
+    const all = JSON.parse(localStorage.getItem('mk_books') || '[]');
+    setBooks(all);
+  }, []);
+
+  const search = q => {
+    q = q.trim().toLowerCase();
+    if (!q) return books;
+    return books.filter(b =>
+      (b.title + b.author + b.category).toLowerCase().includes(q)
+    );
+  };
+
+  const filterByCategory = cat => {
+    if (!cat) return books;
+    return books.filter(b => b.category === cat);
+  };
+
+  return { books, search, filterByCategory };
+}
+
+/* ---------------------- STYL ---------------------- */
 const pageStyle = {
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial',
+  fontFamily:
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial',
   background: CONFIG.theme.bg,
-  color: '#2b2b2b'
+  color: '#2b2b2b',
+  minHeight: '100vh'
 };
 
-/* ---------------------- GŁÓWNA APLIKACJA ---------------------- */
-export default function App(){
+/* ---------------------- APP ---------------------- */
+export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
@@ -146,53 +166,59 @@ export default function App(){
   );
 }
 
-function StoreApp(){
-  const [showCart,setShowCart] = useState(false);
-  const [showAuth,setShowAuth] = useState(false);
-  const [category,setCategory] = useState('');
+function StoreApp() {
+  const [showCart, setShowCart] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [category, setCategory] = useState('');
   const booksHook = useBooks();
+
   return (
     <div style={pageStyle}>
-      <SiteHeader onOpenCart={()=>setShowCart(true)} onOpenAuth={()=>setShowAuth(true)} category={category} setCategory={setCategory} />
+      <SiteHeader
+        onOpenCart={() => setShowCart(true)}
+        onOpenAuth={() => setShowAuth(true)}
+        category={category}
+        setCategory={setCategory}
+      />
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <Catalog booksHook={booksHook} category={category} setCategory={setCategory} />
+        <Catalog booksHook={booksHook} category={category} />
       </main>
       <SiteFooter />
-      {showCart && <CartModal onClose={()=>setShowCart(false)} />}
-      {showAuth && <AuthModal onClose={()=>setShowAuth(false)} />}
+      {showCart && <CartModal onClose={() => setShowCart(false)} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </div>
   );
 }
 
-/* ---------------------- HEADER & FOOTER ---------------------- */
-function SiteHeader({onOpenCart,onOpenAuth,category,setCategory}){
-  const {user, logout} = useAuth();
-  const {items} = useCart();
+/* ---------------------- HEADER ---------------------- */
+function SiteHeader({ onOpenCart, onOpenAuth, category, setCategory }) {
+  const { user, logout } = useAuth();
+  const { items } = useCart();
   return (
-    <header style={{background:CONFIG.theme.card, borderBottom:'1px solid rgba(0,0,0,0.06)'}}>
-      <div style={{maxWidth:1100, margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px'}}>
-        <div style={{display:'flex', alignItems:'center', gap:12}}>
-          <div style={{width:72, height:72, borderRadius:12, background:'#efe1d6', display:'flex',alignItems:'center',justifyContent:'center', fontWeight:800, color:CONFIG.theme.accent}}>MK</div>
+    <header style={{ background: CONFIG.theme.card, borderBottom: '1px solid #ccc' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 60, height: 60, borderRadius: 10, background: '#efe1d6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: CONFIG.theme.accent }}>MK</div>
           <div>
-            <div style={{fontSize:20, fontWeight:800}}>Magia Ksiąg</div>
-            <div style={{fontSize:12, color:'#666'}}>{CONFIG.address}</div>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>{CONFIG.shopName}</div>
+            <div style={{ fontSize: 12, color: '#666' }}>{CONFIG.address}</div>
           </div>
         </div>
-        <div style={{display:'flex', gap:10, alignItems:'center'}}>
-          <select value={category} onChange={e=>setCategory(e.target.value)} style={{padding:8, borderRadius:8}}>
-            <option value=''>Wszystkie kategorie</option>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select value={category} onChange={e => setCategory(e.target.value)} style={{ padding: 8, borderRadius: 6 }}>
+            <option value="">Wszystkie kategorie</option>
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <button onClick={onOpenCart} style={{position:'relative', padding:'10px 12px', borderRadius:8, background:CONFIG.theme.accent, color:'#fff'}}>
-            Koszyk {items.length>0 && <span style={{background:'#fff', color:CONFIG.theme.accent, padding:'2px 6px', borderRadius:10, marginLeft:8}}>{items.length}</span>}
+          <button onClick={onOpenCart} style={{ background: CONFIG.theme.accent, color: '#fff', borderRadius: 8, padding: '8px 12px' }}>
+            Koszyk {items.length > 0 && <span style={{ background: '#fff', color: CONFIG.theme.accent, marginLeft: 6, padding: '0 5px', borderRadius: 8 }}>{items.length}</span>}
           </button>
           {user ? (
-            <div style={{display:'flex', alignItems:'center', gap:8}}>
-              <div style={{fontSize:14}}>Witaj, <strong>{user.name||user.email}</strong></div>
-              <button onClick={logout} style={{padding:'8px 10px', borderRadius:8}}>Wyloguj</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>Witaj, <b>{user.name || user.email}</b></span>
+              <button onClick={logout}>Wyloguj</button>
             </div>
           ) : (
-            <button onClick={onOpenAuth} style={{padding:'8px 10px', borderRadius:8}}>Zaloguj / Rejestracja</button>
+            <button onClick={onOpenAuth}>Zaloguj</button>
           )}
         </div>
       </div>
@@ -200,149 +226,100 @@ function SiteHeader({onOpenCart,onOpenAuth,category,setCategory}){
   );
 }
 
-function SiteFooter(){
+/* ---------------------- FOOTER ---------------------- */
+function SiteFooter() {
   return (
-    <footer style={{padding:24, textAlign:'center', marginTop:24}}>
-      <div style={{fontWeight:700}}>Magia Ksiąg</div>
-      <div style={{color:'#555'}}>{CONFIG.address} · {CONFIG.email} · {CONFIG.phone}</div>
-      <div style={{marginTop:8}}><a href={CONFIG.facebook} target="_blank" rel="noreferrer">Facebook</a></div>
+    <footer style={{ padding: 20, textAlign: 'center' }}>
+      <b>Magia Ksiąg</b><br />
+      {CONFIG.address} · {CONFIG.email} · {CONFIG.phone}<br />
+      <a href={CONFIG.facebook} target="_blank" rel="noreferrer">Facebook</a>
     </footer>
   );
 }
 
 /* ---------------------- KATALOG ---------------------- */
-function Catalog({booksHook, category}){
-  const {books, search, filterByCategory} = booksHook;
-  const [q,setQ] = useState('');
-  const [results,setResults] = useState(books);
-  useEffect(()=> setResults(category ? filterByCategory(category) : books),[books,category]);
-  function doSearch(e){ e.preventDefault(); setResults(search(q)); }
+function Catalog({ booksHook, category }) {
+  const { books, search, filterByCategory } = booksHook;
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState([]);
+
+  useEffect(() => {
+    setResults(category ? filterByCategory(category) : books);
+  }, [books, category]);
+
+  const doSearch = e => {
+    e.preventDefault();
+    setResults(search(q));
+  };
+
   return (
     <section>
-      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-        <h1 style={{fontSize:28, fontWeight:800}}>Katalog książek</h1>
-        <form onSubmit={doSearch} style={{display:'flex', gap:8}}>
-          <input placeholder="Szukaj..." value={q} onChange={e=>setQ(e.target.value)} style={{padding:8, borderRadius:8}} />
-          <button className="btn">Szukaj</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ fontSize: 28, fontWeight: 800 }}>Katalog książek</h1>
+        <form onSubmit={doSearch} style={{ display: 'flex', gap: 6 }}>
+          <input placeholder="Szukaj..." value={q} onChange={e => setQ(e.target.value)} style={{ padding: 8, borderRadius: 6 }} />
+          <button>Szukaj</button>
         </form>
       </div>
-      <div style={{marginTop:18, display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:18}}>
+      <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px,1fr))', gap: 18 }}>
         {results.map(b => <BookCard key={b.id} book={b} />)}
       </div>
     </section>
   );
 }
 
-function BookCard({book}){
-  const {add} = useCart();
+function BookCard({ book }) {
+  const { add } = useCart();
   return (
-    <article style={{background:CONFIG.theme.card, padding:14, borderRadius:10, boxShadow:'0 6px 18px rgba(0,0,0,0.06)', display:'flex', flexDirection:'column'}}>
-      <div style={{height:160, borderRadius:8, background:'#f3efe8', display:'flex', alignItems:'center', justifyContent:'center', color:'#8b7a6b'}}>OKŁADKA</div>
-      <h3 style={{marginTop:10, fontSize:16}}>{book.title}</h3>
-      <div style={{color:'#666'}}>{book.author}</div>
-      <div style={{marginTop:'auto', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-        <div style={{fontWeight:800}}>{book.price.toFixed(2)} zł</div>
-        <div style={{display:'flex', gap:8}}>
-          <button onClick={()=>add(book,1)} style={{padding:'8px 12px', borderRadius:8, background:CONFIG.theme.accent, color:'#fff'}}>Do koszyka</button>
-          <button onClick={()=>window.alert('Szczegóły książki (demo)')} style={{padding:'8px 12px', borderRadius:8, border:'1px solid #ddd'}}>Szczegóły</button>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-/* ---------------------- KOSZYK I ZAMÓWIENIE (Stripe Checkout) ---------------------- */
-function CartModal({onClose}){
-  const {items, remove, updateQty, clear, total} = useCart();
-  const {user, refreshUser} = useAuth();
-
-  async function checkoutStripe(){
-    if(items.length===0){ alert('Koszyk pusty'); return; }
-    try{
-      // Wyślij zamówienie na serwer, który utworzy sesję Stripe
-      const resp = await fetch('/api/create-checkout-session', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({items, userEmail: user? user.email: undefined})
-      });
-      const {url} = await resp.json();
-      if(url) window.location.href = url; else alert('Błąd tworzenia sesji');
-    }catch(err){ console.error(err); alert('Błąd płatności'); }
-  }
-
-  async function checkoutEmail(){
-    // fallback: wysyłka zamówienia przez Formspree (jeśli ustawione)
-    if(!confirm('Wyślij zamówienie e-mailem (bez płatności)?')) return;
-    const owner = CONFIG.email;
-    const body = {
-      subject: 'Nowe zamówienie z Magia Ksiąg (bez płatności)',
-      to: owner,
-      items,
-      total
-    };
-    // wyślij do /api/notify-order (vercel function) lub bezpośrednio do FORMSPREE
-    await fetch('/api/notify-order', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}).then(()=>{
-      alert('Zamówienie wysłane e-mailem (demo)'); clear(); onClose();
-    }).catch(e=>{ alert('Błąd wysyłki e-mail'); console.error(e); });
-  }
-
-  return (
-    <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:60}}>
-      <div style={{width:'90%', maxWidth:900, background:'#fff', borderRadius:12, padding:18}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <h3 style={{fontSize:18}}>Twój koszyk</h3>
-          <button onClick={onClose}>✕</button>
-        </div>
-        <div style={{maxHeight:400, overflow:'auto', marginTop:12}}>
-          {items.length===0 && <div style={{color:'#666'}}>Koszyk jest pusty</div>}
-          {items.map(it=> (
-            <div key={it.id} style={{display:'flex', gap:12, alignItems:'center', padding:10, borderBottom:'1px solid #f0f0f0'}}>
-              <div style={{width:64, height:64, background:'#f3efe8', borderRadius:8}} />
-              <div style={{flex:1}}>
-                <div style={{fontWeight:700}}>{it.title}</div>
-                <div style={{color:'#666'}}>{it.author}</div>
-              </div>
-              <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                <input type="number" min={1} value={it.qty} onChange={e=>updateQty(it.id, Number(e.target.value))} style={{width:60,padding:6,borderRadius:6}} />
-                <div style={{fontWeight:700}}>{(it.price*it.qty).toFixed(2)} zł</div>
-                <button onClick={()=>remove(it.id)} style={{color:'red'}}>Usuń</button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12}}>
-          <div style={{fontWeight:700}}>Suma: {total.toFixed(2)} zł</div>
-          <div style={{display:'flex', gap:8}}>
-            <button onClick={checkoutEmail} style={{padding:'8px 12px', borderRadius:8}}>Zamów e-mailem</button>
-            <button onClick={checkoutStripe} style={{padding:'8px 12px', borderRadius:8, background:CONFIG.theme.accent, color:'#fff'}}>Kup teraz (Stripe)</button>
-          </div>
-        </div>
+    <div style={{ background: CONFIG.theme.card, padding: 12, borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ height: 150, background: '#f6f2ea', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8b7a6b' }}>OKŁADKA</div>
+      <h3 style={{ marginTop: 10 }}>{book.title}</h3>
+      <div style={{ color: '#555' }}>{book.author}</div>
+      <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <b>{Number(book.price).toFixed(2)} zł</b>
+        <button onClick={() => add(book)}>Dodaj</button>
       </div>
     </div>
   );
 }
 
-/* ---------------------- LOGOWANIE / REJESTRACJA ---------------------- */
-function AuthModal({onClose}){
-  const {signup, login} = useAuth();
-  const [mode,setMode] = useState('login');
-  const [email,setEmail] = useState('');
-  const [pass,setPass] = useState('');
-  const [name,setName] = useState('');
-  async function doSubmit(e){ e.preventDefault(); try{ if(mode==='login'){ login({email,password:pass}); alert('Zalogowano'); } else { signup({email,password:pass,name}); alert('Konto utworzone'); } onClose(); }catch(err){ alert(err.message); }}
+/* ---------------------- MODALE ---------------------- */
+function AuthModal({ onClose }) {
+  const { signup, login } = useAuth();
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const [name, setName] = useState('');
+
+  const handleSubmit = e => {
+    e.preventDefault();
+    try {
+      if (mode === 'login') login({ email, password: pass });
+      else signup({ email, password: pass, name });
+      alert(mode === 'login' ? 'Zalogowano' : 'Zarejestrowano');
+      onClose();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   return (
-    <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:70}}>
-      <div style={{background:'#fff', padding:18, borderRadius:10, width:420}}>
-        <div style={{display:'flex', justifyContent:'space-between'}}>
-          <h3>{mode==='login'? 'Logowanie':'Rejestracja'}</h3>
-          <button onClick={onClose}>✕</button>
-        </div>
-        <form onSubmit={doSubmit} style={{marginTop:12, display:'flex', flexDirection:'column', gap:8}}>
-          {mode==='register' && <input placeholder='Imię i nazwisko' value={name} onChange={e=>setName(e.target.value)} />}
-          <input placeholder='E-mail' value={email} onChange={e=>setEmail(e.target.value)} />
-          <input placeholder='Hasło' type='password' value={pass} onChange={e=>setPass(e.target.value)} />
-          <div style={{display:'flex', justifyContent:'space-between', marginTop:8}}>
-            <button type='button' onClick={()=>setMode(mode==='login'?'register':'login')}>{mode==='login'? 'Rejestracja':'Masz konto?'}</button>
-            <button type='submit' style={{background:CONFIG.theme.accent, color:'#fff', padding:'8px 12px', borderRadius:8}}>{mode==='login'? 'Zaloguj':'Zarejestruj'}</button>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 10, padding: 20, width: 400 }}>
+        <h3>{mode === 'login' ? 'Logowanie' : 'Rejestracja'}</h3>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {mode === 'register' && (
+            <input placeholder="Imię i nazwisko" value={name} onChange={e => setName(e.target.value)} />
+          )}
+          <input placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)} />
+          <input placeholder="Hasło" type="password" value={pass} onChange={e => setPass(e.target.value)} />
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <button type="button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
+              {mode === 'login' ? 'Zarejestruj się' : 'Mam konto'}
+            </button>
+            <button type="submit" style={{ background: CONFIG.theme.accent, color: '#fff', padding: '6px 12px', borderRadius: 6 }}>
+              {mode === 'login' ? 'Zaloguj' : 'Rejestruj'}
+            </button>
           </div>
         </form>
       </div>
@@ -350,91 +327,38 @@ function AuthModal({onClose}){
   );
 }
 
-/* ---------------------- PODGLĄD ZAMÓWIEŃ ---------------------- */
-export function OrdersView(){
-  const {user} = useAuth();
-  if(!user) return <div style={{color:'#666'}}>Zaloguj się żeby zobaczyć zamówienia</div>;
-  const u = JSON.parse(localStorage.getItem('mk_users')||'[]').find(x=>x.email===user.email) || user;
-  const orders = u.orders || [];
+/* ---------------------- KOSZYK ---------------------- */
+function CartModal({ onClose }) {
+  const { items, remove, updateQty, clear, total } = useCart();
+
+  const checkoutEmail = async () => {
+    alert('Zamówienie demo wysłane e-mailem');
+    clear();
+    onClose();
+  };
+
   return (
-    <div>
-      <h2>Twoje zamówienia</h2>
-      {orders.length===0 && <div style={{color:'#666'}}>Brak zamówień</div>}
-      <div style={{display:'grid', gap:12, marginTop:12}}>
-        {orders.map(o=> (
-          <div key={o.id} style={{background:'#fff', padding:12, borderRadius:8}}>
-            <div style={{display:'flex', justifyContent:'space-between'}}>
-              <div><strong>{o.id}</strong></div>
-              <div style={{color:'#666'}}>{new Date(o.date).toLocaleString()}</div>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 10, padding: 20, width: '90%', maxWidth: 800 }}>
+        <h3>Koszyk</h3>
+        {items.length === 0 && <p>Koszyk pusty</p>}
+        {items.map(it => (
+          <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #eee' }}>
+            <span>{it.title}</span>
+            <div>
+              <input type="number" value={it.qty} min={1} onChange={e => updateQty(it.id, e.target.value)} style={{ width: 50 }} />
+              <button onClick={() => remove(it.id)}>Usuń</button>
             </div>
-            <div style={{marginTop:8}}>
-              {o.items.map(it=> (
-                <div key={it.id} style={{display:'flex', gap:8, alignItems:'center', borderBottom:'1px solid #f0f0f0', padding:'6px 0'}}>
-                  <div style={{width:40,height:40,background:'#f3efe8'}} />
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700}}>{it.title}</div>
-                    <div style={{color:'#666'}}>{it.qty} × {it.price} zł</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{textAlign:'right', fontWeight:800, marginTop:8}}>Suma: {o.total.toFixed(2)} zł</div>
           </div>
         ))}
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between' }}>
+          <b>Suma: {total.toFixed(2)} zł</b>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={checkoutEmail}>Zamów e-mailem</button>
+            <button onClick={onClose}>Zamknij</button>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-
-/* ---------------------- KONIEC FRONTEND ---------------------- */
-
-/* ---------------------- PRZYKŁADOWE FUNKCJE SERVERLESS (Vercel) ----------------------
-
-Plik: /api/create-checkout-session.js
--------------------------------------
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-module.exports = async (req, res) => {
-  const { items, userEmail } = req.body;
-  try{
-    const line_items = items.map(it => ({ price_data: { currency: 'pln', product_data: { name: it.title }, unit_amount: Math.round(it.price*100) }, quantity: it.qty }));
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items,
-      mode: 'payment',
-      success_url: `${req.headers.origin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.origin}/?checkout=cancel`,
-      metadata: {userEmail: userEmail || ''}
-    });
-    res.json({url: session.url});
-  }catch(err){ console.error(err); res.status(500).json({error:err.message}); }
-};
-
-Plik: /api/notify-order.js
--------------------------
-// prosty forwarder do Formspree (lub innego endpointa e-mail)
-const fetch = require('node-fetch');
-module.exports = async (req, res) => {
-  const FORMSPREE_ENDPOINT = process.env.FORMSPREE_ENDPOINT; // np. https://formspree.io/f/yourid
-  if(!FORMSPREE_ENDPOINT) return res.status(400).json({error:'FORMSPREE_ENDPOINT not configured'});
-  try{
-    const payload = {subject:req.body.subject||'Zamówienie', message: JSON.stringify(req.body, null, 2)};
-    const resp = await fetch(FORMSPREE_ENDPOINT, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-    const data = await resp.json();
-    res.json({ok:true, data});
-  }catch(err){ console.error(err); res.status(500).json({error:err.message}); }
-};
-
-Uwaga: w Formspree skonfiguruj odbiorcę (Twój e-mail kawiarnia@miedzywierszami.pl) lub użyj innego serwisu (SendGrid, SMTP).
-
-Dokładne kroki wdrożenia Stripe:
-1. Załóż konto Stripe (test mode) i skopiuj klucze testowe.
-2. W Vercel -> Project -> Environment Variables dodaj STRIPE_SECRET_KEY oraz STRIPE_PUBLISHABLE_KEY.
-3. Dodaj plik /api/create-checkout-session.js (kod powyżej) i deployuj.
-4. Po udanej płatności kieruj klienta z success_url do strony z parametrem session_id — wtedy możesz wykonać pobranie sesji z Stripe i zapisać order w DB.
-
-Bezpieczeństwo:
-- Nigdy nie umieszczaj SECRET key w kodzie frontend. Użyj funkcji serverless na Vercel i zmiennych środowiskowych.
-
-*/
-
-/* ---------------------- KONIEC PLIKU ---------------------- */
