@@ -1,0 +1,51 @@
+{
+  "summary": "Comprehensive backend (pytest) and frontend (Playwright) testing of Między Wierszami cafe/bookstore site. 23/23 backend tests passed; all critical frontend flows (auth, menu, bookstore, cart, Stripe checkout, admin panel CRUD) verified working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Cookie auth uses samesite=none + secure which is correct for cross-origin. Bearer fallback works in get_current_user. Good.",
+    "/api/orders accepts a JSON array body but FastAPI auto-generates docs may be a bit odd; consider wrapping in a Pydantic model for clarity (not a bug).",
+    "/api/users/{user_id}/role takes role as query param (not body) - works but unconventional; consider Pydantic body model.",
+    "BookstorePage: add-to-cart button is only shown inside the book details dialog (after clicking a book card). Intentional design, documented for next testers.",
+    "Stripe webhook endpoint exists at /api/webhook/stripe but cannot be reached via ingress unless /api prefix routes are mapped (they are). OK.",
+    "passlib bcrypt - bcrypt warns about __about__ in some versions; not blocking."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {
+    "backend": "100% (23/23)",
+    "frontend": "100% (all critical flows tested OK)"
+  },
+  "test_credentials": "admin@miedzywierszami.pl / Admin123! and test@example.com / Test123! both verified working",
+  "seed_data_creation": "Test users with TEST_ prefix were created via backend tests; one TEST announcement created via admin UI - all data isolated by TEST_ prefix. No production data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bookstore add-to-cart flow: click book card -> dialog opens -> click [data-testid=add-to-cart-btn]. The /cart route is a ProtectedRoute requiring login (cookie or Bearer token). Stripe redirect to checkout.stripe.com confirmed working with PLN currency. Auth uses both httpOnly cookie (samesite=none, secure) and Bearer header. For backend testing use cookies.get('session_token') from login response. 401 errors on initial /auth/me load before login are expected (unauthenticated baseline check).",
+  "verified_flows": [
+    "Customer register/login/logout, /auth/me with Bearer token",
+    "Books CRUD (admin), public list/get",
+    "Order creation, list user orders",
+    "Stripe payment checkout session creation (real Stripe test API)",
+    "Frontend: Stripe redirect to checkout.stripe.com works",
+    "Schedule create/list/delete (admin only)",
+    "Chat post/get (employees+admins only, 403 for customers)",
+    "Announcements CRUD (admin only)",
+    "Users list (admin), role update via query param",
+    "Homepage with OpenStreetMap (Leaflet) renders at Szczecin",
+    "Menu tabs (kawa/herbata/desery/jedzenie) clickable",
+    "Admin dashboard 5 tabs visible, announcement create works, books list shows 6, users list shows 5"
+  ]
+}
