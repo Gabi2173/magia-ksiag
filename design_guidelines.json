@@ -1,0 +1,105 @@
+{
+  "theme": "light",
+  "archetype": "Organic & Earthy",
+  "colors": {
+    "background": "#FDFBF7",
+    "foreground": "#2C2C2A",
+    "primary": "#8C6A5D",
+    "primary_foreground": "#FFFFFF",
+    "secondary": "#E8E3D9",
+    "secondary_foreground": "#3E3B38",
+    "accent": "#C1A594",
+    "accent_foreground": "#2C2C2A",
+    "border": "#E2DFD8",
+    "muted": "#F3F0EA",
+    "muted_foreground": "#7A7571"
+  },
+  "typography": {
+    "headings": {
+      "fontFamily": "Cormorant Garamond, serif",
+      "weights": ["300", "400", "600"],
+      "tracking": "tracking-tight"
+    },
+    "body": {
+      "fontFamily": "Manrope, sans-serif",
+      "weights": ["400", "500"]
+    }
+  },
+  "layout_and_spacing": {
+    "container": "max-w-7xl mx-auto px-6 md:px-12",
+    "section_spacing": "py-24 md:py-32",
+    "grid_system": "Bento Grid Protocol (Tetris Mode for Marketing, Control Room for Admin)",
+    "border_radius": "rounded-2xl"
+  },
+  "components": {
+    "navigation": "Glassmorphism header (backdrop-blur-xl bg-white/70) with 1px border-b border-black/5. Must be sticky top-0 z-50.",
+    "buttons": "Rounded-full for main CTAs. Primary is #8C6A5D. Hover effect: scale up slightly, increase shadow. Active: scale down.",
+    "cards": "Neumorphic / clay style. Background matches page, soft shadow-lg, 1px border-white/50 inner highlight.",
+    "admin_panel": "Dense layout, strictly functional. Use Shadcn UI Tables, Tabs, and Cards. Spacing should be tighter here (p-4 to p-6).",
+    "shopping_cart": "Use Shadcn Sheet (side drawer). Clean list of items, sticky checkout button at the bottom.",
+    "chat_interface": "Use flex-col with overflow-y-auto. Messages from self aligned right (primary color), others left (muted color).",
+    "instagram_feed": "Grid cols-2 md:grid-cols-4 gap-4. Images should have group-hover:scale-105 transition inside overflow-hidden containers."
+  },
+  "motion_and_interactions": {
+    "hover_states": "All buttons/cards must have transition-transform duration-300 ease-out.",
+    "page_load": "Framer motion staggered fade-up for hero and grid items.",
+    "scrolling": "Consider Lenis smooth scroll for the marketing side of the app (home, menu, bookstore)."
+  },
+  "image_urls": {
+    "hero_background": {
+      "url": "https://images.unsplash.com/photo-1758610605872-3195caed0bdd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHw0fHxjb3p5JTIwY2FmZSUyMGJvb2tzdG9yZSUyMGludGVyaW9yfGVufDB8fHx8MTc3OTg5Nzk4NHww&ixlib=rb-4.1.0&q=85",
+      "description": "Cozy cafe interior with bookshelves and seating areas."
+    },
+    "menu_gallery": [
+      {
+        "url": "https://images.unsplash.com/photo-1563311977-d285756282dc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzh8MHwxfHNlYXJjaHwzfHxjb2ZmZWUlMjBsYXR0ZSUyMGFydCUyMHBvdXJpbmd8ZW58MHx8fHwxNzc5ODk3OTg5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Latte art pouring"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1761637604549-4943604df127?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDB8MHwxfHNlYXJjaHwyfHxjYWtlJTIwZGVzc2VydCUyMHBhc3RyeSUyMGNhZmV8ZW58MHx8fHwxNzc5ODk3OTk5fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Decadent chocolate dessert"
+      },
+      {
+        "url": "https://images.pexels.com/photos/9828855/pexels-photo-9828855.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Assortment of cakes"
+      }
+    ],
+    "instagram_feed": [
+      {
+        "url": "https://images.unsplash.com/photo-1542372147193-a7aca54189cd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwxfHxhZXN0aGV0aWMlMjBjYWZlJTIwbGlmZXN0eWxlJTIwaW5zdGFncmFtfGVufDB8fHx8MTc3OTg5ODAwNXww&ixlib=rb-4.1.0&q=85",
+        "description": "Latte and book"
+      },
+      {
+        "url": "https://images.pexels.com/photos/29802751/pexels-photo-29802751.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Rose latte aesthetics"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1559032195-42b455e61dfe?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwzfHxhZXN0aGV0aWMlMjBjYWZlJTIwbGlmZXN0eWxlJTIwaW5zdGFncmFtfGVufDB8fHx8MTc3OTg5ODAwNXww&ixlib=rb-4.1.0&q=85",
+        "description": "Coffee mug"
+      },
+      {
+        "url": "https://images.pexels.com/photos/29679392/pexels-photo-29679392.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Coffee and camera setup"
+      }
+    ],
+    "books": [
+      {
+        "url": "https://images.unsplash.com/photo-1519764340700-3db40311f21e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwxfHxib29rJTIwY292ZXIlMjBsaXRlcmF0dXJlJTIwbWluaW1hbGlzdHxlbnwwfHx8fDE3Nzk4OTgwMTB8MA&ixlib=rb-4.1.0&q=85",
+        "description": "White minimalist book"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1716892001555-c05f13f4362a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwyfHxib29rJTIwY292ZXIlMjBsaXRlcmF0dXJlJTIwbWluaW1hbGlzdHxlbnwwfHx8fDE3Nzk4OTgwMTB8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Yellow book cover"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Use Lucide-React for icons.",
+    "Ensure the hero section uses an overlay of bg-black/40 so the text remains legible over the background image.",
+    "Implement Google Maps or OpenStreetMap using a react-leaflet or similar component in the Map section.",
+    "Use standard Shadcn components for the Admin panel: Sidebar, Tables, Tabs, Cards, Badges.",
+    "Set data-testid attributes on all interactive elements (e.g., add-to-cart-btn, login-submit-btn).",
+    "Make sure forms (login, checkout, admin chat) use controlled React components and Shadcn Forms.",
+    "Apply Cormorant Garamond font to all headings (h1, h2, h3). Apply Manrope to body and UI text."
+  ]
+}
