@@ -1,10 +1,14 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import base64
+import csv
+import io
+import json
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
@@ -386,6 +390,79 @@ async def delete_book(book_id: str, user: User = Depends(require_admin)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Book not found")
     return {"message": "Book deleted successfully"}
+
+@api_router.post("/books/upload-image")
+async def upload_book_image(file: UploadFile = File(...), user: User = Depends(require_admin)):
+    """Upload image file and return base64 data URL"""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:  # 5MB limit
+        raise HTTPException(status_code=400, detail="File too large (max 5MB)")
+    
+    encoded = base64.b64encode(contents).decode("utf-8")
+    data_url = f"data:{file.content_type};base64,{encoded}"
+    return {"image_url": data_url}
+
+@api_router.post("/books/bulk-import")
+async def bulk_import_books(request: Request, user: User = Depends(require_admin)):
+    """Import multiple books from JSON or CSV"""
+    content_type = request.headers.get("content-type", "")
+    
+    books_data = []
+    
+    if "application/json" in content_type:
+        body = await request.json()
+        # Accept either {"books": [...]} or [...]
+        if isinstance(body, dict) and "books" in body:
+            books_data = body["books"]
+        elif isinstance(body, list):
+            books_data = body
+        else:
+            raise HTTPException(status_code=400, detail="Invalid JSON format")
+    else:
+        # Try CSV parsing
+        body = await request.body()
+        text = body.decode("utf-8")
+        reader = csv.DictReader(io.StringIO(text))
+        books_data = list(reader)
+    
+    if not books_data:
+        raise HTTPException(status_code=400, detail="No books to import")
+    
+    created = []
+    errors = []
+    
+    for idx, book in enumerate(books_data):
+        try:
+            # Required fields
+            if not book.get("title") or not book.get("author"):
+                errors.append({"row": idx + 1, "error": "Missing title or author"})
+                continue
+            
+            book_doc = {
+                "book_id": f"book_{uuid.uuid4().hex[:12]}",
+                "title": str(book.get("title", "")).strip(),
+                "author": str(book.get("author", "")).strip(),
+                "description": str(book.get("description", "")).strip(),
+                "price": float(book.get("price", 0)),
+                "image_url": str(book.get("image_url", "")).strip() or "https://images.unsplash.com/photo-1519764340700-3db40311f21e?w=400",
+                "stock": int(book.get("stock", 10)),
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            await db.books.insert_one(book_doc)
+            created.append(book_doc["title"])
+        except (ValueError, TypeError) as e:
+            errors.append({"row": idx + 1, "error": str(e)})
+    
+    return {
+        "created_count": len(created),
+        "error_count": len(errors),
+        "created_titles": created,
+        "errors": errors
+    }
 
 # ============= ORDERS & CART =============
 

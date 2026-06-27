@@ -6,7 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
-import { Calendar, MessageCircle, Megaphone, Users, BookOpen, Plus, Trash2, Send } from 'lucide-react';
+import { Calendar, MessageCircle, Megaphone, Users, BookOpen, Plus, Trash2, Send, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth, API } from '../App';
 import {
@@ -528,6 +528,11 @@ function ChatTab() {
 function BooksTab() {
   const [books, setBooks] = useState([]);
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [mode, setMode] = useState('quick'); // 'quick' or 'full'
+  const [uploading, setUploading] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkFormat, setBulkFormat] = useState('json');
   const [formData, setFormData] = useState({
     title: '',
     author: '',
@@ -552,7 +557,39 @@ function BooksTab() {
     }
   };
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const response = await fetch(`${API}/books/upload-image`, {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFormData((prev) => ({ ...prev, image_url: data.image_url }));
+        toast.success('Zdjęcie wgrane');
+      } else {
+        const err = await response.json();
+        toast.error(err.detail || 'Błąd wgrywania zdjęcia');
+      }
+    } catch (error) {
+      toast.error('Błąd wgrywania zdjęcia');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleCreate = async () => {
+    if (!formData.title || !formData.author) {
+      toast.error('Tytuł i autor są wymagane');
+      return;
+    }
     try {
       const response = await fetch(`${API}/books`, {
         method: 'POST',
@@ -560,8 +597,10 @@ function BooksTab() {
         credentials: 'include',
         body: JSON.stringify({
           ...formData,
-          price: parseFloat(formData.price),
-          stock: parseInt(formData.stock),
+          description: formData.description || `${formData.title} - ${formData.author}`,
+          image_url: formData.image_url || 'https://images.unsplash.com/photo-1519764340700-3db40311f21e?w=400',
+          price: parseFloat(formData.price) || 0,
+          stock: parseInt(formData.stock) || 10,
         }),
       });
       if (response.ok) {
@@ -575,6 +614,59 @@ function BooksTab() {
     } catch (error) {
       toast.error('Błąd');
     }
+  };
+
+  const handleBulkImport = async () => {
+    if (!bulkText.trim()) {
+      toast.error('Wklej dane do importu');
+      return;
+    }
+    try {
+      const headers = { 'Content-Type': bulkFormat === 'json' ? 'application/json' : 'text/csv' };
+      let body = bulkText;
+
+      if (bulkFormat === 'json') {
+        try {
+          JSON.parse(bulkText);
+        } catch {
+          toast.error('Nieprawidłowy JSON');
+          return;
+        }
+      }
+
+      const response = await fetch(`${API}/books/bulk-import`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(`Dodano ${data.created_count} książek (błędów: ${data.error_count})`);
+        if (data.error_count > 0) {
+          console.warn('Bulk import errors:', data.errors);
+        }
+        setBulkOpen(false);
+        setBulkText('');
+        fetchBooks();
+      } else {
+        const err = await response.json();
+        toast.error(err.detail || 'Błąd importu');
+      }
+    } catch (error) {
+      toast.error('Błąd importu');
+    }
+  };
+
+  const handleBulkFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      setBulkText(evt.target.result);
+      setBulkFormat(file.name.endsWith('.csv') ? 'csv' : 'json');
+    };
+    reader.readAsText(file);
   };
 
   const handleDelete = async (id) => {
@@ -593,84 +685,192 @@ function BooksTab() {
     }
   };
 
+  const jsonExample = `[
+  {
+    "title": "Tytuł książki",
+    "author": "Autor",
+    "description": "Opis książki",
+    "price": 39.90,
+    "image_url": "https://...",
+    "stock": 10
+  }
+]`;
+
+  const csvExample = `title,author,description,price,image_url,stock
+"Tytuł","Autor","Opis",39.90,https://...,10`;
+
   return (
     <Card className="neumorphic border-border/40">
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
         <div>
           <CardTitle className="font-heading">Zarządzanie książkami</CardTitle>
           <CardDescription>Dodawaj i edytuj książki w księgarni</CardDescription>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="rounded-full" data-testid="add-book-button">
-              <Plus className="mr-2 h-4 w-4" /> Dodaj książkę
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Nowa książka</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-              <div>
-                <Label>Tytuł</Label>
-                <Input
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  data-testid="book-title-input"
-                />
-              </div>
-              <div>
-                <Label>Autor</Label>
-                <Input
-                  value={formData.author}
-                  onChange={(e) => setFormData({ ...formData, author: e.target.value })}
-                  data-testid="book-author-input"
-                />
-              </div>
-              <div>
-                <Label>Opis</Label>
-                <Textarea
-                  rows={4}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  data-testid="book-description-input"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+        <div className="flex gap-2 flex-wrap">
+          <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="rounded-full" data-testid="bulk-import-button">
+                <Upload className="mr-2 h-4 w-4" /> Import masowy
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Import masowy książek</DialogTitle>
+                <DialogDescription>
+                  Dodaj wiele książek naraz w formacie JSON lub CSV
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+                <Tabs value={bulkFormat} onValueChange={setBulkFormat}>
+                  <TabsList className="grid grid-cols-2 w-full">
+                    <TabsTrigger value="json">JSON</TabsTrigger>
+                    <TabsTrigger value="csv">CSV</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
                 <div>
-                  <Label>Cena (zł)</Label>
+                  <Label>Wgraj plik ({bulkFormat === 'json' ? '.json' : '.csv'})</Label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    data-testid="book-price-input"
+                    type="file"
+                    accept={bulkFormat === 'json' ? '.json,application/json' : '.csv,text/csv'}
+                    onChange={handleBulkFileUpload}
+                    data-testid="bulk-file-input"
                   />
                 </div>
+
                 <div>
-                  <Label>Ilość</Label>
-                  <Input
-                    type="number"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                  <Label>Lub wklej dane bezpośrednio</Label>
+                  <Textarea
+                    rows={10}
+                    value={bulkText}
+                    onChange={(e) => setBulkText(e.target.value)}
+                    placeholder={bulkFormat === 'json' ? jsonExample : csvExample}
+                    className="font-mono text-xs"
+                    data-testid="bulk-text-input"
                   />
                 </div>
+
+                <div className="bg-muted/40 p-3 rounded-lg text-xs">
+                  <p className="font-semibold mb-1">Wymagane pola:</p>
+                  <p className="text-muted-foreground">
+                    title, author (reszta opcjonalna: description, price, image_url, stock)
+                  </p>
+                </div>
               </div>
-              <div>
-                <Label>URL Zdjęcia</Label>
-                <Input
-                  value={formData.image_url}
-                  onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                  placeholder="https://..."
-                  data-testid="book-image-input"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={handleCreate} data-testid="submit-book">Dodaj</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button onClick={handleBulkImport} data-testid="submit-bulk-import">
+                  Importuj
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="rounded-full" data-testid="add-book-button">
+                <Plus className="mr-2 h-4 w-4" /> Dodaj książkę
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Nowa książka</DialogTitle>
+              </DialogHeader>
+
+              <Tabs value={mode} onValueChange={setMode} className="w-full">
+                <TabsList className="grid grid-cols-2 w-full mb-4">
+                  <TabsTrigger value="quick" data-testid="mode-quick">Szybki</TabsTrigger>
+                  <TabsTrigger value="full" data-testid="mode-full">Pełny formularz</TabsTrigger>
+                </TabsList>
+
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                  <div>
+                    <Label>Tytuł *</Label>
+                    <Input
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      data-testid="book-title-input"
+                    />
+                  </div>
+                  <div>
+                    <Label>Autor *</Label>
+                    <Input
+                      value={formData.author}
+                      onChange={(e) => setFormData({ ...formData, author: e.target.value })}
+                      data-testid="book-author-input"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Cena (zł)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        data-testid="book-price-input"
+                      />
+                    </div>
+                    <div>
+                      <Label>Ilość</Label>
+                      <Input
+                        type="number"
+                        value={formData.stock}
+                        onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Zdjęcie</Label>
+                    <div className="space-y-2">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        disabled={uploading}
+                        data-testid="book-image-file"
+                      />
+                      <p className="text-xs text-muted-foreground">lub wklej URL:</p>
+                      <Input
+                        value={formData.image_url.startsWith('data:') ? '' : formData.image_url}
+                        onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                        placeholder="https://..."
+                        data-testid="book-image-input"
+                      />
+                      {formData.image_url && (
+                        <div className="mt-2">
+                          <img
+                            src={formData.image_url}
+                            alt="Podgląd"
+                            className="w-24 h-32 object-cover rounded-lg border border-border"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {mode === 'full' && (
+                    <div>
+                      <Label>Opis</Label>
+                      <Textarea
+                        rows={4}
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        data-testid="book-description-input"
+                      />
+                    </div>
+                  )}
+                </div>
+              </Tabs>
+
+              <DialogFooter>
+                <Button onClick={handleCreate} data-testid="submit-book" disabled={uploading}>
+                  {uploading ? 'Wgrywanie...' : 'Dodaj'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </CardHeader>
       <CardContent>
         {books.length === 0 ? (
