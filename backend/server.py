@@ -31,6 +31,25 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Stripe setup
 stripe_api_key = os.getenv('STRIPE_API_KEY', 'sk_test_emergent')
 
+# ============= STAFF CONFIGURATION =============
+# Add emails here to automatically assign roles on registration/login
+# Role options: "employee" (Pracownik), "admin" (Pracodawca)
+STAFF_ROLES: Dict[str, str] = {
+    "admin@miedzywierszami.pl": "admin",
+    # Examples - add real staff emails here:
+    # "pracodawca@miedzywierszami.pl": "admin",
+    # "pracownik1@miedzywierszami.pl": "employee",
+    # "pracownik2@miedzywierszami.pl": "employee",
+    "test.pracownik@miedzywierszami.pl": "employee",
+    "test.pracodawca@miedzywierszami.pl": "admin",
+}
+
+
+def get_role_for_email(email: str) -> str:
+    """Returns the role for a given email - admin/employee if in STAFF_ROLES, else customer"""
+    return STAFF_ROLES.get(email.lower().strip(), "customer")
+
+
 # Create the main app
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -196,14 +215,14 @@ async def register(data: UserRegister):
     # Hash password
     hashed_password = pwd_context.hash(data.password)
     
-    # Create user
+    # Create user - auto-assign role from STAFF_ROLES config
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     user_doc = {
         "user_id": user_id,
         "email": data.email,
         "name": data.name,
         "password": hashed_password,
-        "role": "customer",
+        "role": get_role_for_email(data.email),
         "picture": None,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -222,6 +241,12 @@ async def login(data: UserLogin, response: Response):
     # Verify password
     if not pwd_context.verify(data.password, user_doc["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Auto-update role if email is in STAFF_ROLES config (allows promoting users via code)
+    expected_role = get_role_for_email(data.email)
+    if expected_role != "customer" and user_doc.get("role") != expected_role:
+        await db.users.update_one({"email": data.email}, {"$set": {"role": expected_role}})
+        user_doc["role"] = expected_role
     
     # Create session
     session_token = f"session_{uuid.uuid4().hex}"
@@ -290,25 +315,30 @@ async def google_oauth_session(request: Request, response: Response):
     user_doc = await db.users.find_one({"email": user_data["email"]}, {"_id": 0})
     
     if not user_doc:
-        # Create new user
+        # Create new user - auto-assign role from STAFF_ROLES config
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         user_doc = {
             "user_id": user_id,
             "email": user_data["email"],
             "name": user_data["name"],
             "picture": user_data.get("picture"),
-            "role": "customer",
+            "role": get_role_for_email(user_data["email"]),
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(user_doc)
     else:
-        # Update existing user
+        # Update existing user + auto-update role if in STAFF_ROLES
+        expected_role = get_role_for_email(user_data["email"])
+        update_set = {
+            "name": user_data["name"],
+            "picture": user_data.get("picture")
+        }
+        if expected_role != "customer" and user_doc.get("role") != expected_role:
+            update_set["role"] = expected_role
+            user_doc["role"] = expected_role
         await db.users.update_one(
             {"email": user_data["email"]},
-            {"$set": {
-                "name": user_data["name"],
-                "picture": user_data.get("picture")
-            }}
+            {"$set": update_set}
         )
         user_doc["name"] = user_data["name"]
         user_doc["picture"] = user_data.get("picture")
@@ -738,6 +768,11 @@ async def get_users(user: User = Depends(require_admin)):
         if isinstance(u['created_at'], str):
             u['created_at'] = datetime.fromisoformat(u['created_at'])
     return users
+
+@api_router.get("/staff/config")
+async def get_staff_config(user: User = Depends(require_admin)):
+    """View pre-configured staff emails (from code)"""
+    return {"staff_roles": STAFF_ROLES}
 
 @api_router.put("/users/{user_id}/role")
 async def update_user_role(user_id: str, role: str, current_user: User = Depends(require_admin)):

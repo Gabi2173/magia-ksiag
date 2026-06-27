@@ -76,7 +76,7 @@ function Navigation() {
                     </DropdownMenuItem>
                     {(user.role === 'admin' || user.role === 'employee') && (
                       <DropdownMenuItem onClick={() => navigate('/admin')} data-testid="admin-link">
-                        Panel Administracyjny
+                        Praca
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem onClick={handleLogout} data-testid="logout-button">
@@ -142,7 +142,7 @@ function Navigation() {
                       setMobileMenuOpen(false);
                     }}
                   >
-                    Panel Administracyjny
+                    Praca
                   </Button>
                 )}
                 <Button

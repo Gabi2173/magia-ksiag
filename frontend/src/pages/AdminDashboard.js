@@ -34,15 +34,15 @@ function AdminDashboard() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-4xl font-heading font-light tracking-tight mb-2">
-            Panel Administracyjny
+            Praca
           </h1>
           <p className="text-muted-foreground font-body">
-            Witaj, {user?.name}! Zarządzaj swoją kawiarnią.
+            Witaj, {user?.name}! {user?.role === 'admin' ? 'Panel Pracodawcy' : 'Panel Pracownika'}
           </p>
         </div>
 
         <Tabs defaultValue="announcements" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 mb-6">
+          <TabsList className={`grid w-full ${user?.role === 'admin' ? 'grid-cols-3 md:grid-cols-5' : 'grid-cols-3'} mb-6`}>
             <TabsTrigger value="announcements" data-testid="tab-announcements">
               <Megaphone className="mr-2 h-4 w-4" /> Ogłoszenia
             </TabsTrigger>
@@ -52,13 +52,15 @@ function AdminDashboard() {
             <TabsTrigger value="chat" data-testid="tab-chat">
               <MessageCircle className="mr-2 h-4 w-4" /> Czat
             </TabsTrigger>
-            <TabsTrigger value="books" data-testid="tab-books">
-              <BookOpen className="mr-2 h-4 w-4" /> Książki
-            </TabsTrigger>
             {user?.role === 'admin' && (
-              <TabsTrigger value="users" data-testid="tab-users">
-                <Users className="mr-2 h-4 w-4" /> Użytkownicy
-              </TabsTrigger>
+              <>
+                <TabsTrigger value="books" data-testid="tab-books">
+                  <BookOpen className="mr-2 h-4 w-4" /> Książki
+                </TabsTrigger>
+                <TabsTrigger value="users" data-testid="tab-users">
+                  <Users className="mr-2 h-4 w-4" /> Użytkownicy
+                </TabsTrigger>
+              </>
             )}
           </TabsList>
 
@@ -71,13 +73,15 @@ function AdminDashboard() {
           <TabsContent value="chat">
             <ChatTab />
           </TabsContent>
-          <TabsContent value="books">
-            <BooksTab />
-          </TabsContent>
           {user?.role === 'admin' && (
-            <TabsContent value="users">
-              <UsersTab />
-            </TabsContent>
+            <>
+              <TabsContent value="books">
+                <BooksTab />
+              </TabsContent>
+              <TabsContent value="users">
+                <UsersTab />
+              </TabsContent>
+            </>
           )}
         </Tabs>
       </div>
